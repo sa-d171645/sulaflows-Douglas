@@ -1,0 +1,53 @@
+name: Build and Deploy
+
+on:
+  push:
+    paths:
+      - 'version_*.dmn'
+
+jobs:
+  jobCheckVersion:
+    name: Version Check
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.determine_version.outputs.version_name }}
+      repo: ${{ steps.extract_repo.outputs.repo_name }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get Latest Version
+        id: determine_version
+        run: |
+          latest_file=$(ls version_*.dmn | sort -V | tail -n 1)
+          version_name=$(echo $latest_file | sed 's/version_\([0-9]*\.[0-9]*\.[0-9]*\)\.dmn/\1/')
+          echo "version_name=$version_name" >> $GITHUB_OUTPUT
+
+      - name: Extract Repo Name
+        id: extract_repo
+        run: |
+          repo_name=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          echo "repo_name=$repo_name" >> $GITHUB_OUTPUT
+
+  jobBuildAndDeploy:
+    name: Build Publish Kogito Image
+    needs: jobCheckVersion
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy Quarkus App
+        uses: sas-spark/github-actions/build-push-deploy-kogito-gcp@main
+        with:
+          projectId: 'sas-reembolso-br-v1-dev'
+          region: 'southamerica-east1'
+          repository: 'images'
+          credentials: ${{ secrets.SAS_REEMBOLSO_BR_V1_DEV }}
+          name: ${{ needs.jobCheckVersion.outputs.repo }}
+          version: ${{ needs.jobCheckVersion.outputs.version }}
+          kafkaConfluentB64Credentials: ${{ secrets.KAFKA_CONFLUENT_B64_CREDENTIALS }}
